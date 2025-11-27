@@ -19,7 +19,7 @@ if (process.env.DATABASE_URL) {
   connectionConfig = {  
     connectionString: process.env.DATABASE_URL,  
     // If using Heroku / SSL:  
-    // ssl: { rejectUnauthorized: false },  
+    ssl: { rejectUnauthorized: false },  
   };  
 } else {  
   connectionConfig = {  
