@@ -42,12 +42,26 @@ CREATE TABLE IF NOT EXISTS users (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create index on phone_number for faster lookups
-CREATE INDEX idx_users_phone_number ON users(phone_number);
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_subscription_tier ON users(subscription_tier);
+-- Create indexes (idempotent)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                   WHERE c.relname = 'idx_users_phone_number' AND n.nspname = 'public') THEN
+        CREATE INDEX idx_users_phone_number ON users(phone_number);
+    END IF;
 
--- Create session logs table for detailed tracking
+    IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                   WHERE c.relname = 'idx_users_email' AND n.nspname = 'public') THEN
+        CREATE INDEX idx_users_email ON users(email);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                   WHERE c.relname = 'idx_users_subscription_tier' AND n.nspname = 'public') THEN
+        CREATE INDEX idx_users_subscription_tier ON users(subscription_tier);
+    END IF;
+END $$;
+
+-- Create session logs table
 CREATE TABLE IF NOT EXISTS session_logs (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -59,10 +73,20 @@ CREATE TABLE IF NOT EXISTS session_logs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_session_logs_user_id ON session_logs(user_id);
-CREATE INDEX idx_session_logs_login_time ON session_logs(login_time);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                   WHERE c.relname = 'idx_session_logs_user_id' AND n.nspname = 'public') THEN
+        CREATE INDEX idx_session_logs_user_id ON session_logs(user_id);
+    END IF;
 
--- Create usage logs table for detailed activity tracking
+    IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                   WHERE c.relname = 'idx_session_logs_login_time' AND n.nspname = 'public') THEN
+        CREATE INDEX idx_session_logs_login_time ON session_logs(login_time);
+    END IF;
+END $$;
+
+-- Create usage logs table
 CREATE TABLE IF NOT EXISTS usage_logs (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
@@ -72,9 +96,23 @@ CREATE TABLE IF NOT EXISTS usage_logs (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_usage_logs_user_id ON usage_logs(user_id);
-CREATE INDEX idx_usage_logs_action ON usage_logs(action);
-CREATE INDEX idx_usage_logs_created_at ON usage_logs(created_at);
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                   WHERE c.relname = 'idx_usage_logs_user_id' AND n.nspname = 'public') THEN
+        CREATE INDEX idx_usage_logs_user_id ON usage_logs(user_id);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                   WHERE c.relname = 'idx_usage_logs_action' AND n.nspname = 'public') THEN
+        CREATE INDEX idx_usage_logs_action ON usage_logs(action);
+    END IF;
+
+    IF NOT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+                   WHERE c.relname = 'idx_usage_logs_created_at' AND n.nspname = 'public') THEN
+        CREATE INDEX idx_usage_logs_created_at ON usage_logs(created_at);
+    END IF;
+END $$;
 
 -- Create function to update updated_at timestamp
 CREATE OR REPLACE FUNCTION update_updated_at_column()
@@ -83,11 +121,18 @@ BEGIN
     NEW.updated_at = CURRENT_TIMESTAMP;
     RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE 'plpgsql';
 
--- Create trigger to automatically update updated_at
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Create trigger to automatically update updated_at (if not exists)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'update_users_updated_at') THEN
+        CREATE TRIGGER update_users_updated_at
+        BEFORE UPDATE ON users
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+    END IF;
+END $$;
 
 -- Create view for user statistics
 CREATE OR REPLACE VIEW user_statistics AS
@@ -103,9 +148,9 @@ SELECT
     u.intents_created,
     u.total_sessions,
     u.session_duration,
-    COUNT(sl.id) as total_session_records,
-    COALESCE(SUM(sl.duration), 0) as total_logged_duration,
-    MAX(sl.login_time) as last_session_login
+    COUNT(sl.id) AS total_session_records,
+    COALESCE(SUM(sl.duration), 0) AS total_logged_duration,
+    MAX(sl.login_time) AS last_session_login
 FROM users u
 LEFT JOIN session_logs sl ON u.id = sl.user_id
 GROUP BY u.id;
