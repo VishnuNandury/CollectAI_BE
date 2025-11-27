@@ -12,7 +12,10 @@ require('dotenv').config();
 //});
 if (process.env.DATABASE_URL) {  
   // e.g. for cloud / single URL style  
-  connectionConfig = {  connectionString: process.env.DATABASE_URL,};  
+  connectionConfig = {  
+    connectionString: process.env.DATABASE_URL,
+    ssl: {rejectUnauthorized: false},  
+  };  
 } else {  
   connectionConfig = {  
     host: process.env.DB_HOST || 'localhost',  
@@ -22,7 +25,8 @@ if (process.env.DATABASE_URL) {
     password: process.env.DB_PASSWORD || '',  
     max: 20,  
     idleTimeoutMillis: 30000,  
-    connectionTimeoutMillis: 5000,  
+    connectionTimeoutMillis: 5000, 
+    ssl: {rejectUnauthorized: false},
   };  
 }  
   
